@@ -1,115 +1,144 @@
-# 🏍️ Rastreamento e Contagem de Motos com YOLOv8 + ByteTrack
+# 🏍️ Rastreamento e Monitoramento de Motos – YOLOv8 + ByteTrack + Dashboard Web
 
-Este projeto implementa um sistema de **detecção, rastreamento e contagem de motocicletas em tempo real**.  
-O modelo utiliza [YOLOv8](https://github.com/ultralytics/ultralytics) para detecção e [ByteTrack](https://github.com/ifzhang/ByteTrack) para rastreamento de múltiplos objetos, com visualização das caixas, IDs, trilhas e métricas na tela.
+Este projeto implementa um **sistema completo de detecção, rastreamento e monitoramento de motocicletas em tempo real**, com visualização via **dashboard web interativo**.  
+A detecção é feita com [YOLOv8](https://github.com/ultralytics/ultralytics), o rastreamento com [ByteTrack](https://github.com/ifzhang/ByteTrack), e o painel usa **FastAPI (Python)** + **React (JavaScript)** para exibir a localização, estado e alertas das motos em tempo real.
 
 ---
 
 ## ✨ Funcionalidades
-- 🚦 **Detecção em tempo real** de múltiplas motos em vídeo ou webcam.
-- 🆔 **Rastreamento persistente** com IDs únicos por moto.
-- 🔢 **Contagem acumulada** de todas as motos que apareceram no vídeo.
-- 📊 **Métricas em HUD**: FPS, acurácia (confiança), número de objetos no frame e total acumulado.
-- 📝 **Exportação opcional em CSV** com logs (timestamp, frame, track_id, bbox, confiança).
-- 💾 **Gravação de vídeo processado** com detecções sobrepostas.
+
+- 🚦 **Detecção em tempo real** de múltiplas motos em vídeo ou câmera.  
+- 🆔 **Rastreamento persistente** com IDs únicos para cada moto.  
+- 📍 **Localização no pátio (mapa SVG)** com atualização contínua.  
+- 🧭 **Estados automáticos**: em uso, parada, manutenção ou fora da área.  
+- 🚨 **Alertas em tempo real** via WebSocket (ocioso, baixa confiança, fora da área).  
+- 📊 **Dashboard Web** com:
+  - KPIs (totais por estado),
+  - mapa do pátio com pontos ativos,
+  - lista de alertas recentes,
+  - grid com detalhes de cada moto.  
+- 🔁 **Loop automático** do vídeo (modo demo).  
+- 💾 **Exportação de logs CSV** (timestamp, frame, ID, bbox, confiança).  
+- 🧠 **Arquitetura modular**: detecção + servidor + front-end separados.
 
 ---
 
-## 📦 Instalação
+## 🧱 Estrutura do Projeto
 
-Crie um ambiente virtual (recomendado) e instale as dependências:
+```
+📂 projeto_motos/
+ ┣ 📜 moto_server.py         # Servidor FastAPI + YOLOv8 + ByteTrack + WebSocket
+ ┣ 📜 MotoYardDashboard.jsx  # Front-end React (dashboard)
+ ┣ 📜 MotoYardDashboard.css  # Estilos do dashboard
+ ┣ 📜 track_motos.py         # Versão CLI (rastreamento simples local)
+ ┣ 📂 videos/                # Vídeos de teste
+ ┗ 📄 README.md
+```
+
+---
+
+## 📦 Instalação (Back-end)
+
+### 1. Criar ambiente e instalar dependências
 
 ```bash
-# criar ambiente virtual (opcional)
+# criar ambiente virtual
 python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
 .\.venv\Scripts\activate   # Windows
+source .venv/bin/activate  # Linux/Mac
 
 # atualizar pip
 pip install --upgrade pip
 
-# instalar dependências principais
-pip install ultralytics supervision opencv-python
+# instalar pacotes principais
+pip install ultralytics supervision opencv-python fastapi uvicorn[standard]
 ```
 
-Se precisar do PyTorch CPU/GPU manualmente, consulte: [Instruções oficiais](https://pytorch.org/get-started/locally/).
+### 2. (Opcional) Instalar PyTorch manualmente
+Se o YOLO não rodar automaticamente, siga as [instruções oficiais do PyTorch](https://pytorch.org/get-started/locally/).
 
 ---
 
-## ▶️ Uso
+## ▶️ Execução
 
-Rodar o script com um vídeo:
-
+### 🧠 1. Rodar o servidor de rastreamento
 ```bash
-python track_motos.py --source test.mp4 --show-fps
+python moto_server.py
 ```
+Ele vai:
+- abrir o vídeo/câmera para detecção e rastreamento,
+- iniciar um servidor local (`http://localhost:8000`),
+- e transmitir os dados via **WebSocket** (`ws://localhost:8000/ws`).
 
-Rodar usando webcam:
-
-```bash
-python track_motos.py --source 0 --show-fps
+### 🎥 2. Escolher fonte de vídeo
+No início do `moto_server.py` altere:
+```python
+VIDEO_SOURCE = "0"              # Webcam
+# ou
+VIDEO_SOURCE = "./videos/teste.mp4"  # Arquivo de vídeo
 ```
-
-Gravar a saída anotada em vídeo:
-
-```bash
-python track_motos.py --source test.mp4 --save saida.mp4
-```
-
-Exportar log CSV com detecções:
-
-```bash
-python track_motos.py --source test.mp4 --export-csv motos_log.csv
-```
-
-Loopar vídeo até apertar `q`:
-
-```bash
-python track_motos.py --source test.mp4 --loop
-```
+O servidor reinicia o vídeo automaticamente ao chegar ao final.
 
 ---
 
-## ⚙️ Argumentos Disponíveis
+## 💻 Front-end (Dashboard Web)
 
-| Argumento         | Descrição                                                                 | Padrão      |
-|-------------------|---------------------------------------------------------------------------|-------------|
-| `--source`        | Fonte do vídeo (`0` para webcam ou caminho do arquivo)                    | `0`         |
-| `--model`         | Modelo YOLOv8 a ser usado (ex.: `yolov8n.pt`, `yolov8s.pt`)               | `yolov8n.pt`|
-| `--conf`          | Confiança mínima para detecção (0–1)                                      | `0.35`      |
-| `--save`          | Caminho para salvar o vídeo de saída (`.mp4`)                             | _vazio_     |
-| `--show-fps`      | Exibe FPS no HUD                                                          | `False`     |
-| `--loop`          | Reinicia o vídeo automaticamente ao chegar no fim                        | `False`     |
-| `--export-csv`    | Exporta log CSV com timestamp, frame, track_id, bbox e confiança          | _vazio_     |
+### 1. Criar projeto React
+```bash
+npm create vite@latest motos-dashboard -- --template react
+cd motos-dashboard
+npm install
+```
+
+### 2. Adicionar os arquivos
+Copie para `src/`:
+- `MotoYardDashboard.jsx`
+- `MotoYardDashboard.css`
+
+Edite `src/App.jsx`:
+```jsx
+import MotoYardDashboard from './MotoYardDashboard';
+export default function App() {
+  return <MotoYardDashboard />;
+}
+```
+
+### 3. Rodar o front-end
+```bash
+npm run dev
+```
+Abra o link (geralmente `http://localhost:5173`)  
+O painel tentará se conectar automaticamente a `ws://localhost:8000/ws`.
 
 ---
 
-## 📊 Saída
+## 🧠 Tecnologias Utilizadas
 
-### Na tela
-- Caixa colorida ao redor de cada moto detectada.
-- Label com **ID + confiança** (`Moto 3 0.87`).
-- Linha de rastro do movimento.
-- HUD com FPS, acurácia, número de objetos no frame e total acumulado.
+| Camada | Tecnologia | Função |
+|--------|-------------|--------|
+| **IA / Visão Computacional** | [YOLOv8](https://github.com/ultralytics/ultralytics) | Detecção de motos em vídeo |
+|  | [ByteTrack](https://github.com/ifzhang/ByteTrack) | Rastreamento com IDs persistentes |
+| **Processamento de Vídeo** | OpenCV | Leitura, exibição e desenho de detecções |
+| **Servidor** | FastAPI + Uvicorn | API e WebSocket em tempo real |
+| **Comunicação** | WebSocket | Envio contínuo de dados para o front-end |
+| **Interface Web** | React.js (via Vite) | Dashboard interativo |
+| **Estilo** | CSS puro | Layout responsivo e leve |
+| **Execução Paralela** | Threading Python | Roda IA + servidor simultaneamente |
 
-### No terminal
-Ao final da execução:
-```
-================ RESULTADO ================
-Total de motos que apareceram (IDs únicos): 42
-==========================================
-```
+---
 
-### Em CSV (opcional)
-Cada linha contém:
-```
-timestamp_s, frame_idx, track_id, x1, y1, x2, y2, conf
-```
+## 📊 Visualizações no Dashboard
+
+- **Mapa do pátio:** pontos das motos com cores por estado  
+  🟢 em uso • ⚪ parada • 🟡 manutenção • 🔴 fora da área  
+- **KPIs superiores:** totais e contagens por categoria  
+- **Alertas recentes:** lista de eventos com timestamp  
+- **Grade de motos:** dados detalhados de cada ID ativo  
 
 ---
 
 ## 📹 Vídeos para Teste
-Você pode baixar vídeos gratuitos para teste em:
+
 - [Pixabay – Motorcycle Videos](https://pixabay.com/videos/search/motorcycle/)
 - [Pexels – Motorcycle Clips](https://www.pexels.com/search/videos/motorcycle/)
 - [Mixkit – Free Motorcycle Footage](https://mixkit.co/free-stock-video/motorcycle/)
@@ -124,18 +153,8 @@ Você pode baixar vídeos gratuitos para teste em:
 | Nicolas Barutti    | 554944  |
 | Lucas Rainha       | 558471  |
 
-<<<<<<< HEAD
-## 👥 Participantes
-
-| Nome               | RM      |
-|--------------------|---------|
-| Kleber da Silva    | 557887  |
-| Nicolas Barutti    | 554944  |
-| Lucas Rainha       | 558471  |
-
 ---
 
 ## 📄 Licença
-Este projeto é open-source sob a licença MIT.
-=======
->>>>>>> 488a06c43608878806d6b99564c5c698a848b3d6
+Este projeto é open-source sob a licença **MIT**.  
+Sinta-se livre para adaptar e expandir conforme suas necessidades.
